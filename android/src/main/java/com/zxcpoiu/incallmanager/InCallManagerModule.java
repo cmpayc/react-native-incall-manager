@@ -1587,10 +1587,10 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
     @Override
     public void onHostDestroy() {
         Log.d(TAG, "onDestroy()");
-        stopRingtone();
-        stopRingback();
-        stopBusytone();
-        stop();
+        // stopRingtone();
+        // stopRingback();
+        // stopBusytone();
+        // stop();
     }
 
     private void updateAudioRoute() {

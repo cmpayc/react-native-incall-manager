@@ -26,6 +26,8 @@ import android.Manifest.permission;
 //import android.media.AudioAttributes; // --- for API 21+
 import android.media.AudioManager;
 import android.media.AudioDeviceInfo;
+import android.media.AudioFocusRequest;
+import android.media.AudioAttributes;
 import android.media.MediaPlayer;
 import android.media.ToneGenerator;
 import android.net.Uri;
@@ -87,7 +89,8 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
     private boolean origIsMicrophoneMute = false;
     private int origAudioMode = AudioManager.MODE_INVALID;
     private boolean defaultSpeakerOn = false;
-    private int defaultAudioMode = AudioManager.MODE_IN_COMMUNICATION;
+    // private int defaultAudioMode = AudioManager.MODE_IN_COMMUNICATION;
+    private int defaultAudioMode = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ? AudioManager.MODE_NORMAL : AudioManager.MODE_IN_COMMUNICATION;
     private int forceSpeakerOn = 0;
     private boolean automatic = true;
     private boolean isProximityRegistered = false;
@@ -169,7 +172,6 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
     private Set<AudioDevice> audioDevices = new HashSet<>();
 
     // Callback method for changes in audio focus.
-    private AudioManager.OnAudioFocusChangeListener audioFocusChangeListener;
 
     interface MyPlayerInterface {
         public boolean isPlaying();
@@ -260,6 +262,10 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
     private void restoreOriginalAudioSetup() {
         Log.d(TAG, "restoreOriginalAudioSetup()");
         if (isOrigAudioSetupStored) {
+            if (bluetoothManager.getState() == AppRTCBluetoothManager.State.UNINITIALIZED) {
+                Log.d(TAG, "restart bluetooth");
+                bluetoothManager.start();
+            }
             setSpeakerphoneOn(origIsSpeakerPhoneOn);
             setMicrophoneMute(origIsMicrophoneMute);
             audioManager.setMode(origAudioMode);
@@ -640,7 +646,22 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
 
     private void requestAudioFocus() {
         if (!isAudioFocused) {
-            int result = audioManager.requestAudioFocus(mOnFocusChangeListener, AudioManager.STREAM_VOICE_CALL, AudioManager.AUDIOFOCUS_GAIN);
+            // int result = audioManager.requestAudioFocus(mOnFocusChangeListener, AudioManager.STREAM_VOICE_CALL, AudioManager.AUDIOFOCUS_GAIN);
+            int result = AudioManager.AUDIOFOCUS_REQUEST_FAILED;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build();
+                AudioFocusRequest focusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                        .setAudioAttributes(audioAttributes)
+                        .setAcceptsDelayedFocusGain(true)
+                        .setOnAudioFocusChangeListener(mOnFocusChangeListener)
+                        .build();
+                result = audioManager.requestAudioFocus(focusRequest);
+            } else {
+                result = audioManager.requestAudioFocus(mOnFocusChangeListener, AudioManager.STREAM_VOICE_CALL, AudioManager.AUDIOFOCUS_GAIN);
+            }
             if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
                 Log.d(TAG, "AudioFocus granted");
                 isAudioFocused = true;
@@ -948,7 +969,7 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
             }
 
             if (audioManagerActivated) {
-                stop();
+                // stop();
             }
 
             wakeLockUtils.acquirePartialWakeLock();
@@ -1035,9 +1056,11 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
             public void onPrepared(MediaPlayer mp) {
                 Log.d(TAG, String.format("MediaPlayer %s onPrepared(), start play, isSpeakerPhoneOn %b", name, audioManager.isSpeakerphoneOn()));
                 if (name.equals("mBusytone")) {
-                    audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                    //audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                    audioManager.setMode(defaultAudioMode);
                 } else if (name.equals("mRingback")) {
-                    audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                    //audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                    audioManager.setMode(defaultAudioMode);
                 } else if (name.equals("mRingtone")) {
                     audioManager.setMode(AudioManager.MODE_RINGTONE);
                 } 
@@ -1307,9 +1330,11 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
 
                         // --- make sure audio routing, or it will be wired when switch suddenly
                         if (caller.equals("mBusytone")) {
-                            audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                            //audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                            audioManager.setMode(defaultAudioMode);
                         } else if (caller.equals("mRingback")) {
-                            audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                            //audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                            audioManager.setMode(defaultAudioMode);
                         } else if (caller.equals("mRingtone")) {
                             audioManager.setMode(AudioManager.MODE_RINGTONE);
                         } 
@@ -1479,6 +1504,11 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
         } else if (audioRoute.equals(AudioDevice.BLUETOOTH.name())) {
             selectAudioDevice(AudioDevice.BLUETOOTH);
         }
+        promise.resolve(getAudioDeviceStatusMap());
+    }
+
+    @ReactMethod
+    public void getAudioDevicesList(Promise promise) {
         promise.resolve(getAudioDeviceStatusMap());
     }
 
@@ -1880,13 +1910,13 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
     private AudioDevice getPreferredAudioDevice(boolean skipBluetooth) {
         final AudioDevice newAudioDevice;
 
-        if (userSelectedAudioDevice != null && userSelectedAudioDevice != AudioDevice.NONE) {
-            newAudioDevice = userSelectedAudioDevice;
-        } else if (!skipBluetooth && audioDevices.contains(AudioDevice.BLUETOOTH)) {
+        if (!skipBluetooth && audioDevices.contains(AudioDevice.BLUETOOTH) && userSelectedAudioDevice != AudioDevice.SPEAKER_PHONE) {
             // If a Bluetooth is connected, then it should be used as output audio
             // device. Note that it is not sufficient that a headset is available;
             // an active SCO channel must also be up and running.
             newAudioDevice = AudioDevice.BLUETOOTH;
+        } else if (userSelectedAudioDevice != null && userSelectedAudioDevice != AudioDevice.NONE) {
+            newAudioDevice = userSelectedAudioDevice;
         } else if (audioDevices.contains(AudioDevice.WIRED_HEADSET)) {
             // If a wired headset is connected, but Bluetooth is not, then wired headset is used as
             // audio device.

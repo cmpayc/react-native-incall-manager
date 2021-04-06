@@ -182,6 +182,11 @@ class InCallManager {
         let result = await _InCallManager.chooseAudioRoute(route);
         return result;
     }
+
+    async getAudioDevicesList() {
+        let result = await _InCallManager.getAudioDevicesList();
+        return result;
+    }
 }
 
 export default new InCallManager();

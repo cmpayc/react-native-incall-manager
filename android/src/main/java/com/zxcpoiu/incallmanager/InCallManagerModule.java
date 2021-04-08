@@ -90,7 +90,7 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
     private int origAudioMode = AudioManager.MODE_INVALID;
     private boolean defaultSpeakerOn = false;
     // private int defaultAudioMode = AudioManager.MODE_IN_COMMUNICATION;
-    private int defaultAudioMode = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ? AudioManager.MODE_NORMAL : AudioManager.MODE_IN_COMMUNICATION;
+    private int defaultAudioMode = AudioManager.MODE_NORMAL;
     private int forceSpeakerOn = 0;
     private boolean automatic = true;
     private boolean isProximityRegistered = false;
@@ -122,6 +122,7 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
     private static final String SPEAKERPHONE_TRUE = "true";
     private static final String SPEAKERPHONE_FALSE = "false";
 
+    private Thread audioThread = null;
     /**
      * AudioDevice is the names of possible audio devices that we currently
      * support.
@@ -559,7 +560,7 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
     }
 
     @ReactMethod
-    public void start(final String _media, final boolean auto, final String ringbackUriType) {
+    public void start(final String _media, final boolean auto, final String ringbackUriType, final String mode) {
         media = _media;
         if (media.equals("video")) {
             defaultSpeakerOn = true;
@@ -582,7 +583,8 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
             bluetoothManager.start();
             // TODO: even if not acquired focus, we can still play sounds. but need figure out which is better.
             //getCurrentActivity().setVolumeControlStream(AudioManager.STREAM_VOICE_CALL);
-            audioManager.setMode(defaultAudioMode);
+            // audioManager.setMode(defaultAudioMode);
+            setAudioMode(mode);
             setSpeakerphoneOn(defaultSpeakerOn);
             setMicrophoneMute(false);
             forceSpeakerOn = 0;
@@ -1510,6 +1512,26 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
     @ReactMethod
     public void getAudioDevicesList(Promise promise) {
         promise.resolve(getAudioDeviceStatusMap());
+    }
+
+    @ReactMethod
+    public void setAudioMode(String mode) {
+        if (audioManagerActivated) {
+            final int newMode;
+            if (mode.equals("IN_COMMUNICATION")) {
+                newMode = AudioManager.MODE_IN_COMMUNICATION;
+            } else {
+                newMode = AudioManager.MODE_NORMAL;
+            }
+            if (newMode != audioManager.getMode()) {
+                audioThread = new Thread(new Runnable() {
+                    public void run() {
+                        audioManager.setMode(newMode);
+                    }
+                }, "AudioManager Thread");
+                audioThread.start();
+            }
+        }
     }
 
     private void _requestPermission(String targetPermission, Promise promise) {

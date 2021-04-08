@@ -28,7 +28,8 @@ class InCallManager {
         let auto = (setup.auto === false) ? false : true;
         let media = (setup.media === 'video') ? 'video' : 'audio';
         let ringback = (!!setup.ringback) ? (typeof setup.ringback === 'string') ? setup.ringback : "" : "";
-        _InCallManager.start(media, auto, ringback);
+        let mode = setup.mode || 'NORMAL';
+        _InCallManager.start(media, auto, ringback, mode);
     }
 
     stop(setup) {
@@ -186,6 +187,10 @@ class InCallManager {
     async getAudioDevicesList() {
         let result = await _InCallManager.getAudioDevicesList();
         return result;
+    }
+
+    setAudioMode(mode) {
+        _InCallManager.setAudioMode(mode);
     }
 }
 

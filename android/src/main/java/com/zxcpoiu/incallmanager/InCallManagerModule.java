@@ -470,6 +470,17 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
             switch (focusChange) {
                 case AudioManager.AUDIOFOCUS_GAIN:
                     focusChangeStr = "AUDIOFOCUS_GAIN";
+                    if (audioManager.isSpeakerphoneOn()) {
+                        selectedAudioDevice = AudioDevice.SPEAKER_PHONE;
+                    } else {
+                        if (audioDevices.contains(AudioDevice.BLUETOOTH)) {
+                            selectedAudioDevice = AudioDevice.BLUETOOTH;
+                        } else if (hasWiredHeadset) {
+                            selectedAudioDevice = AudioDevice.WIRED_HEADSET;
+                        } else if (hasEarpiece()) {
+                            selectedAudioDevice = AudioDevice.EARPIECE;
+                        }
+                    }
                     break;
                 case AudioManager.AUDIOFOCUS_GAIN_TRANSIENT:
                     focusChangeStr = "AUDIOFOCUS_GAIN_TRANSIENT";
@@ -795,6 +806,7 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
         // --- Note: in some devices, it may not contains specified route thus will not be effected.
         if (flag == 1) {
             selectAudioDevice(AudioDevice.SPEAKER_PHONE);
+            turnScreenOn();
         } else if (flag == -1) {
             selectAudioDevice(AudioDevice.EARPIECE); // --- use the most common earpiece to force `speaker off`
         } else {

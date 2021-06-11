@@ -29,7 +29,11 @@ class InCallManager {
         let media = (setup.media === 'video') ? 'video' : 'audio';
         let ringback = (!!setup.ringback) ? (typeof setup.ringback === 'string') ? setup.ringback : "" : "";
         let mode = setup.mode || 'NORMAL';
-        _InCallManager.start(media, auto, ringback, mode);
+        if (Platform.OS === 'android') {
+            _InCallManager.start(media, auto, ringback, mode);
+        } else {
+            _InCallManager.start(media, auto, ringback);
+        }
     }
 
     stop(setup) {

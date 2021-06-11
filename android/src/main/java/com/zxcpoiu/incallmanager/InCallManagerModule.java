@@ -273,7 +273,7 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
             if (getCurrentActivity() != null) {
                 getCurrentActivity().setVolumeControlStream(AudioManager.USE_DEFAULT_STREAM_TYPE);
             }
-            isOrigAudioSetupStored = false;
+            // isOrigAudioSetupStored = false;
         }
     }
 

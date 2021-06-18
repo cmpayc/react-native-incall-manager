@@ -193,8 +193,8 @@ class InCallManager {
         return result;
     }
 
-    setAudioMode(mode) {
-        _InCallManager.setAudioMode(mode);
+    setAudioMode(mode, isForce = false) {
+        _InCallManager.setAudioMode(mode, isForce);
     }
 }
 

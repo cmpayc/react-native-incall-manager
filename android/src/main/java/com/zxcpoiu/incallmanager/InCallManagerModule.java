@@ -87,7 +87,8 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
     private boolean isOrigAudioSetupStored = false;
     private boolean origIsSpeakerPhoneOn = false;
     private boolean origIsMicrophoneMute = false;
-    private int origAudioMode = AudioManager.MODE_INVALID;
+    private int origAudioMode = AudioManager.MODE_NORMAL;
+    private String origAudioModeString = "NORMAL";
     private boolean defaultSpeakerOn = false;
     // private int defaultAudioMode = AudioManager.MODE_IN_COMMUNICATION;
     private int defaultAudioMode = AudioManager.MODE_NORMAL;
@@ -252,12 +253,15 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
 
     private void storeOriginalAudioSetup() {
         Log.d(TAG, "storeOriginalAudioSetup()");
-        // if (!isOrigAudioSetupStored) {
-            origAudioMode = audioManager.getMode();
-            origIsSpeakerPhoneOn = audioManager.isSpeakerphoneOn();
-            origIsMicrophoneMute = audioManager.isMicrophoneMute();
-            isOrigAudioSetupStored = true;
-        // }
+        origAudioMode = audioManager.getMode();
+        if (origAudioMode == audioManager.MODE_IN_COMMUNICATION) {
+            origAudioModeString = "IN_COMMUNICATION";
+        } else {
+            origAudioModeString = "NORMAL";
+        }
+        origIsSpeakerPhoneOn = audioManager.isSpeakerphoneOn();
+        origIsMicrophoneMute = audioManager.isMicrophoneMute();
+        isOrigAudioSetupStored = true;
     }
 
     private void restoreOriginalAudioSetup() {
@@ -270,8 +274,13 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
         setMicrophoneMute(origIsMicrophoneMute);
         audioManager.setMode(origAudioMode);
         if (getCurrentActivity() != null) {
-            getCurrentActivity().setVolumeControlStream(AudioManager.USE_DEFAULT_STREAM_TYPE);
+            if (origAudioMode == audioManager.MODE_NORMAL) {
+                getCurrentActivity().setVolumeControlStream(AudioManager.USE_DEFAULT_STREAM_TYPE);
+            } else {
+                getCurrentActivity().setVolumeControlStream(AudioManager.STREAM_RING);
+            }
         }
+        updateAudioDeviceState();
     }
 
     private void startWiredHeadsetEvent() {
@@ -491,10 +500,10 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
                     break;
             }
             if (
-               focusChangeStr.equals("AUDIOFOCUS_GAIN")
-               || focusChangeStr.equals("AUDIOFOCUS_GAIN_TRANSIENT")
-               || focusChangeStr.equals("AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE")
-               || focusChangeStr.equals("AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK")
+                focusChangeStr.equals("AUDIOFOCUS_GAIN")
+                || focusChangeStr.equals("AUDIOFOCUS_GAIN_TRANSIENT")
+                || focusChangeStr.equals("AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE")
+                || focusChangeStr.equals("AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK")
             ) {
                 /*
                 if (audioManager.isSpeakerphoneOn()) {
@@ -657,6 +666,9 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
                 // storeOriginalAudioSetup();
                 // restoreOriginalAudioSetup();
                 releaseAudioFocus();
+                if (isAudioFocused) {
+                    audioManager.setMode(defaultAudioMode);
+                }
                 if (!busytoneUriType.equals("focusLost")) {
                     audioManagerActivated = false;
                 }
@@ -1561,32 +1573,48 @@ public class InCallManagerModule extends ReactContextBaseJavaModule implements L
         promise.resolve(getAudioDeviceStatusMap());
     }
 
-    @ReactMethod
     public void setAudioMode(String mode) {
+        setAudioMode(mode, false);
+    }
+
+    @ReactMethod
+    public void setAudioMode(final String mode, Boolean isForce) {
+        Log.d(TAG, "RNInCallManager.setAudioMode(): " + mode);
+        
         if (mode.equals("IN_COMMUNICATION")) {
             origAudioMode = AudioManager.MODE_IN_COMMUNICATION;
         } else {
             origAudioMode = AudioManager.MODE_NORMAL;
         }
-        if (!isAudioFocused) {
+
+        if (!isAudioFocused && !isForce) {
             return;
         }
-        if (audioManagerActivated) {
-            final int newMode;
-            if (mode.equals("IN_COMMUNICATION")) {
-                newMode = AudioManager.MODE_IN_COMMUNICATION;
-            } else {
-                newMode = AudioManager.MODE_NORMAL;
-            }
-            origAudioMode = newMode;
-            if (newMode != audioManager.getMode()) {
-                audioThread = new Thread(new Runnable() {
-                    public void run() {
-                        audioManager.setMode(newMode);
+
+        final int newMode;
+        if (mode.equals("IN_COMMUNICATION")) {
+            newMode = AudioManager.MODE_IN_COMMUNICATION;
+        } else {
+            newMode = AudioManager.MODE_NORMAL;
+        }
+
+        if (mode != origAudioModeString || newMode != audioManager.getMode()) {
+            origAudioModeString = mode;
+            audioThread = new Thread(new Runnable() {
+                public void run() {
+                    audioManager.setMode(newMode);
+                    if (getCurrentActivity() != null) {
+                        if (mode.equals("IN_COMMUNICATION")) {
+                            getCurrentActivity().setVolumeControlStream(AudioManager.STREAM_VOICE_CALL);
+                        } else if (mode.equals("AUDIO")) {
+                            getCurrentActivity().setVolumeControlStream(AudioManager.STREAM_MUSIC);
+                        } else {
+                            getCurrentActivity().setVolumeControlStream(AudioManager.STREAM_RING);
+                        }
                     }
-                }, "AudioManager Thread");
-                audioThread.start();
-            }
+                }
+            }, "AudioManager Thread");
+            audioThread.start();
         }
     }
 

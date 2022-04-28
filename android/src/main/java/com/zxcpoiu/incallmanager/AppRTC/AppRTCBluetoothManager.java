@@ -11,6 +11,7 @@
 package com.zxcpoiu.incallmanager.AppRTC;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHeadset;
@@ -28,6 +29,9 @@ import android.util.Log;
 import java.util.List;
 import java.util.Set;
 
+import com.facebook.react.bridge.ReactApplicationContext;
+import com.facebook.react.modules.core.PermissionAwareActivity;
+import com.facebook.react.modules.core.PermissionListener;
 import com.zxcpoiu.incallmanager.InCallManagerModule;
 
 /**
@@ -74,6 +78,8 @@ public class AppRTCBluetoothManager {
   private BluetoothHeadset bluetoothHeadset;
   private BluetoothDevice bluetoothDevice;
   private final BroadcastReceiver bluetoothHeadsetReceiver;
+
+  private static final int BLUETOOTH_CONNECT_PERMISSION_REQUEST = 1;
 
   // Runs when the Bluetooth timeout expires. We use that timeout after calling
   // startScoAudio() or stopScoAudio() because we're not guaranteed to get a
@@ -224,12 +230,51 @@ public class AppRTCBluetoothManager {
    * Note that the AppRTCAudioManager is also involved in driving this state
    * change.
    */
+
+  private PermissionListener bluetoothConnectPermissionListener = new PermissionListener() {
+    @Override
+    public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+      switch (requestCode) {
+        case BLUETOOTH_CONNECT_PERMISSION_REQUEST: {
+          // If request is cancelled, the result arrays are empty.
+          if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            realStart();
+          } else {
+            Log.w(TAG, "Process (pid=" + Process.myPid() + ") lacks BLUETOOTH_CONNECT permission");
+          }
+          return true;
+        }
+      }
+      return false;
+    }
+  };
+
+  private PermissionAwareActivity getPermissionAwareActivity() {
+    ReactApplicationContext reactContext = (ReactApplicationContext) apprtcContext;
+    Activity activity = reactContext.getCurrentActivity();
+    if (activity == null) {
+      throw new IllegalStateException("Tried to use permissions API while not attached to an Activity.");
+    } else if (!(activity instanceof PermissionAwareActivity)) {
+      throw new IllegalStateException("Tried to use permissions API but the host Activity doesn't implement PermissionAwareActivity.");
+    }
+    return (PermissionAwareActivity) activity;
+  }
+
   public void start() {
     Log.d(TAG, "start");
     if (!hasPermission(apprtcContext, android.Manifest.permission.BLUETOOTH)) {
       Log.w(TAG, "Process (pid=" + Process.myPid() + ") lacks BLUETOOTH permission");
       return;
     }
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S && !hasPermission(apprtcContext, android.Manifest.permission.BLUETOOTH_CONNECT)) {
+      PermissionAwareActivity activity = getPermissionAwareActivity();
+      activity.requestPermissions(new String[]{android.Manifest.permission.BLUETOOTH_CONNECT}, BLUETOOTH_CONNECT_PERMISSION_REQUEST, bluetoothConnectPermissionListener);
+    } else {
+      realStart();
+    }
+  }
+
+  public void realStart() {
     if (bluetoothState != State.UNINITIALIZED) {
       Log.w(TAG, "Invalid BT state");
       return;

@@ -20,7 +20,12 @@ class InCallManager {
         let auto = (setup.auto === false) ? false : true;
         let media = (setup.media === 'video') ? 'video' : 'audio';
         let ringback = (!!setup.ringback) ? (typeof setup.ringback === 'string') ? setup.ringback : "" : "";
-        _InCallManager.start(media, auto, ringback);
+        let mode = setup.mode || 'NORMAL';
+        if (Platform.OS === 'android') {
+            _InCallManager.start(media, auto, ringback, mode);
+        } else {
+            _InCallManager.start(media, auto, ringback);
+        }
     }
 
     stop(setup) {
@@ -165,6 +170,22 @@ class InCallManager {
     async abandonAudioFocus() {
         if (Platform.OS === 'android') {
             return await _InCallManager.abandonAudioFocusJS();
+        } else {
+            console.log("ios doesn't support requestAudioFocus()");
+        }
+    }
+
+    async getAudioDevicesList() {
+        if (Platform.OS === 'android') {
+            return await _InCallManager.getAudioDevicesList();
+        } else {
+            console.log("ios doesn't support requestAudioFocus()");
+        }
+    }
+
+    setAudioMode(mode, isForce = false) {
+        if (Platform.OS === 'android') {
+            _InCallManager.setAudioMode(mode, isForce);
         } else {
             console.log("ios doesn't support requestAudioFocus()");
         }
